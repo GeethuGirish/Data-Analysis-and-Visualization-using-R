@@ -1,0 +1,179 @@
+---
+title: "Individual Assignment 3"
+author: "MSCI 718 2023W"
+date: "Multiple Linear Regression"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(gridExtra)
+library(car)
+library(GGally)
+```
+
+```{r}
+#importing the melbourne housing data
+housing.dat <- read.csv('C:/Users/Geethu/Documents/Canada/University of Waterloo/Winter 2023/MSCI 718/Assignments/Assignment 3/melb-housing/melb_data.csv')
+str(housing.dat)
+summary(housing.dat)
+```
+
+
+```{r}
+#Shrinking the dataset
+housing.dat <- housing.dat %>% select(Rooms, Price, Distance, Bathroom, BuildingArea, YearBuilt, Regionname, Type)
+
+```
+
+
+```{r}
+#Checking for missing data
+housing.dat %>% summarise_all(list(~sum(is.na(.))))
+#removing NA 
+housing.dat <- na.omit(housing.dat)
+```
+
+
+```{r}
+#Checking for outliers for selected variables: boxplot
+dist.box <- ggplot(data = housing.dat, aes(y = Distance)) + geom_boxplot() + labs(title = "Distance from CBD")
+buildingarea.box <- ggplot(data = housing.dat, aes(y = BuildingArea)) + geom_boxplot() + labs(title = "Building Area")
+boxplot <- grid.arrange(dist.box, buildingarea.box,  ncol=2)
+
+ggpairs(housing.dat)
+```
+
+```{r}
+#Removing outliers using IQR
+dist.iqr <- IQR(housing.dat$Distance)
+dist.low <- quantile(housing.dat$Distance, 0.25) - 1.5 * dist.iqr
+dist.high <- quantile(housing.dat$Distance, 0.75) + 1.5 * dist.iqr
+dist.low
+dist.high
+
+buildingarea.iqr <- IQR(housing.dat$BuildingArea)
+buildingarea.low <- quantile(housing.dat$BuildingArea, 0.25) - 1.5 * buildingarea.iqr
+buildingarea.high <- quantile(housing.dat$BuildingArea, 0.75) + 1.5 * buildingarea.iqr
+buildingarea.low
+buildingarea.high
+
+housing.dat.nooutliers <- subset(housing.dat, housing.dat$Distance >= dist.low  & housing.dat$Distance <= dist.high)
+housing.dat.nooutliers <- subset(housing.dat.nooutliers,housing.dat.nooutliers$BuildingArea > 0 & housing.dat.nooutliers$BuildingArea <=  buildingarea.high)
+```
+
+```{r}
+#boxplot for variables after removing outliers
+dist.box <- ggplot(data = housing.dat.nooutliers, aes(y = Distance)) + geom_boxplot() + labs(title = "Distance from CBD")
+buildingarea.box <- ggplot(data = housing.dat.nooutliers, aes(y = BuildingArea)) + geom_boxplot() + labs(title = "Building Area")
+boxplot <- grid.arrange(dist.box, buildingarea.box,  ncol=3)
+```
+
+```{r}
+#Creating the model
+housing.dat.model <- lm(Price ~ Rooms + Distance + Bathroom + BuildingArea + YearBuilt + Regionname + Type,  data=housing.dat.nooutliers)
+housing.dat.model
+```
+
+```{r}
+summary(housing.dat.model)
+
+```
+
+```{r}
+#testing multicollinearity
+vif(housing.dat.model)
+1/vif(housing.dat.model)
+mean(vif(housing.dat.model))
+```
+#check linearity????
+
+```{r}
+#Testing residuals
+durbinWatsonTest(housing.dat.model)
+```
+
+```{r}
+#Testing homoscedacity+linearity
+plot(housing.dat.model)
+```
+
+```{r}
+#finding outliers
+housing.dat.fitted <- housing.dat.model$fitted
+housing.dat.residuals <- housing.dat$residuals
+housing.dat.standardized.residuals <- rstandard(housing.dat.model)
+
+possible.outliers <- subset(housing.dat, standardized.residuals < -1.96 | standardized.residuals > 1.96)
+possible.outliers
+
+#nrow(possible.outliers) #293
+#nrow(housing.dat) #6830
+```
+
+
+```{r}
+#cooks plot
+housing.dat.cooks <- cooks.distance(housing.dat.model)
+plot(sort(housing.dat.cooks, decreasing=TRUE))
+```
+
+```{r}
+max(housing.dat.cooks)
+```
+
+```{r}
+#Confidence intervals
+confint(housing.dat.model)
+```
+
+```{r}
+housing.dat$Regionname <- factor(housing.dat$Regionname, levels=c("Eastern Metropolitan", "Eastern Victoria", "Northern Metropolitan", "Northern Victoria", "South-Eastern Metropolitan", "Southern Metropolitan", "Western Metropolitan","Western Victoria" ))
+
+levels(housing.dat$Regionname)
+
+East.Metro_v_South_Metro <- c(1,0,0,0,0,0,0,0) 
+East.Vict_v_South_Metro<- c(0,1,0,0,0,0,0,0) 
+North.Metro_v_South_Metro <- c(0,0,1,0,0,0,0,0) 
+North.Vict_v_South_Metro <- c(0,0,0,1,0,0,0,0) 
+South.East.Metro_v_South_Metro <- c(0,0,0,0,1,0,0,0) 
+West.Metro_v_South_Metro <- c(0,0,0,0,0,0,1,0) 
+West.Vict_v_South_Metro <- c(0,0,0,0,0,0,0,1)
+
+contrasts(housing.dat$Regionname) <- cbind(East.Metro_v_South_Metro, East.Vict_v_South_Metro, North.Metro_v_South_Metro, North.Vict_v_South_Metro, South.East.Metro_v_South_Metro, West.Metro_v_South_Metro, West.Vict_v_South_Metro)
+contrasts(housing.dat$Regionname)
+
+
+```
+
+```{r}
+housing.dat.model <- lm(Price ~ Rooms + Distance + Bathroom + BuildingArea + YearBuilt + Regionname, data=housing.dat.nooutliers)
+summary(housing.dat.model)
+```
+```{r}
+housing.dat.Type.model <- lm(Price ~ Rooms + Distance + Bathroom + BuildingArea + YearBuilt + Regionname + Type, data=housing.dat.nooutliers)
+summary(housing.dat.Type.model)
+```
+
+
+```{r}
+housing.dat$Type <- factor(housing.dat$Type, levels=c("h", "t", "u" ))
+levels(housing.dat$Type)
+
+townhouse_v_house <- c(0,1,0)
+unit_v_house <- c(0,0,1)
+
+contrasts(housing.dat$Type) <- cbind(townhouse_v_house, unit_v_house)
+contrasts(housing.dat$Type)
+```
+```{r}
+housing.dat.Type.model <- lm(Price ~ Rooms + Distance + Bathroom + BuildingArea + YearBuilt + Regionname + Type, data=housing.dat.nooutliers)
+summary(housing.dat.Type.model)
+```
