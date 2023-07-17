@@ -1,0 +1,137 @@
+---
+title: "Individual Assignment 2"
+author: "MSCI 718 2023W"
+subtitle: Partial Correlation or Bootstrapping
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+```
+
+
+```{r}
+students_data <- read.csv('C:/Users/Geethu/Documents/Canada/University of Waterloo/Winter 2023/MSCI 718/Assignments/Assignment 2/archive/Data Carrard et al. 2022 MedTeach.csv')
+
+#Checking for missing data
+students_data %>% summarise_all(list(~sum(is.na(.))))
+
+#summary of the dataset
+students_data %>% select("age", "stud_h", "mbi_ex") %>% summary()
+
+#Selecting two variables
+#Checking normality for Age of participant
+age.histogram <- students_data %>% 
+  ggplot(aes(x=age)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) +
+  stat_function(fun=dnorm, args=list(mean=mean(students_data$age, na.rm=TRUE), sd=sd(students_data$age, na.rm=TRUE))) + labs(title = "Histogram for age before transformation")
+age.qq <- students_data %>% 
+  ggplot(aes(sample=age)) + stat_qq() + geom_qq_line(aes(color="red")) + theme(legend.position = "none") + labs(title = "QQ Plot for age before transformation")
+grid.arrange(age.histogram, age.qq, ncol=2)
+
+#Checking skewness
+stat.desc(students_data$age, basic=FALSE, norm=TRUE)["skewness"]
+
+#transforming the variable
+age.log.histogram <- students_data %>% 
+  mutate(age.log = log(age)) %>% 
+  ggplot(aes(x=age.log)) + theme(legend.position = "none") +geom_histogram(aes(y=..density..)) + 
+    stat_function(fun=dnorm, args=list(mean=mean(log(students_data$age), na.rm=TRUE),sd=sd(log(students_data$age), na.rm=TRUE))) + labs(title = "Histogram for age after transformation")
+grid.arrange(age.histogram, age.log.histogram, ncol=2)
+
+age.log.qq <- students_data %>% 
+  mutate(age.log = log(age)) %>% 
+  ggplot(aes(sample=age.log)) + stat_qq() + geom_qq_line(aes(color="red")) + theme(legend.position = "none") + labs(title = "QQ Plot for age after transformation")
+grid.arrange(age.qq, age.log.qq, ncol=2)
+
+#Checking skewness of age after transformation
+log.age <- log(students_data$age)
+stat.desc(log.age, basic=FALSE, norm=TRUE)["skewness"]
+
+#Checking normality for Study hours per week
+stud_h.histogram <- students_data %>% 
+  ggplot(aes(x=stud_h)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) +
+  stat_function(fun=dnorm, args=list(mean=mean(students_data$stud_h, na.rm=TRUE), sd=sd(students_data$stud_h, na.rm=TRUE)))
+stud_h.qq <- students_data %>% 
+  ggplot(aes(sample=stud_h)) + stat_qq() + geom_qq_line(aes(color="red")) + theme(legend.position = "none")
+grid.arrange(stud_h.histogram, stud_h.qq, ncol=2)
+
+#Checking skewness
+stat.desc(students_data$stud_h, basic=FALSE, norm=TRUE)["skewness"]
+
+#Checking normality for Exhaustion scale of the participant
+mbi_ex.histogram <- students_data %>% 
+  ggplot(aes(x=mbi_ex)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) +
+  stat_function(fun=dnorm, args=list(mean=mean(students_data$mbi_ex, na.rm=TRUE), sd=sd(students_data$mbi_ex, na.rm=TRUE)))
+mbi_ex.qq <- students_data %>% 
+  ggplot(aes(sample=mbi_ex)) + stat_qq() + geom_qq_line(aes(color="red")) + theme(legend.position = "none")
+grid.arrange(mbi_ex.histogram, mbi_ex.qq, ncol=2)
+
+#Checking skewness
+stat.desc(students_data$mbi_ex, basic=FALSE, norm=TRUE)["skewness"]
+
+#Checking normality for State-Trait Anxiety Inventory scale of the participant
+stai_t.histogram <- students_data %>% 
+  ggplot(aes(x=stai_t)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) +
+  stat_function(fun=dnorm, args=list(mean=mean(students_data$stai_t, na.rm=TRUE), sd=sd(students_data$stai_t, na.rm=TRUE)))
+stai_t.qq <- students_data %>% 
+  ggplot(aes(sample=stai_t)) + stat_qq() + geom_qq_line(aes(color="red")) + theme(legend.position = "none")
+grid.arrange(stai_t.histogram, stai_t.qq, ncol=2)
+
+#Checking skewness
+stat.desc(students_data$stai_t, basic=FALSE, norm=TRUE)["skewness"]
+
+head(students_data)
+
+#Proceeding with Pearson's correlation as there are more than 30 datapoints the distribution of mean is normal
+cor.test(log.age,students_data$stud_h)
+cor.test(log.age,students_data$mbi_ex)
+cor.test(log.age,students_data$stai_t)
+
+plot_age_stud_h <- ggplot(data = students_data, aes(x = log.age, y = stud_h)) +geom_point() + geom_smooth(method = lm, colour = "Blue", se = F) +labs(title = "Correlation between age and study hours")
+plot_age_mbi_ex <- ggplot(data = students_data, aes(x = log.age, y = mbi_ex)) +geom_point() + geom_smooth(method = lm, colour = "Blue", se = F)+labs(title = "Correlation between age and Exhaution score")
+plot_age_stai_t <- ggplot(data = students_data, aes(x = log.age, y = stai_t)) +geom_point() + geom_smooth(method = lm, colour = "Blue", se = F) + labs(title = "Correlation between age and Anxiety")
+grid.arrange(plot_age_stud_h, plot_age_mbi_ex,ncol=2)
+
+#Bootstrapping age and study hours
+bootRho <- function(dataSet, i) {
+  rho <- cor(log.age[i] ,students_data$stud_h[i], use="complete.obs", method="pearson")
+  return(rho)
+}
+bootPearsonResult <- boot(students_data, bootRho, 2000)
+boot.ci(bootPearsonResult, conf=0.95, type="bca")
+
+#Bootstrapping age and exhaution score
+bootRho <- function(dataSet, i) {
+  rho <- cor(log.age[i] ,students_data$mbi_ex[i], use="complete.obs", method="pearson")
+  return(rho)
+}
+bootPearsonResult <- boot(students_data, bootRho, 2000)
+boot.ci(bootPearsonResult, conf=0.95, type="bca")
+
+#Bootstrapping age and anxiety 
+bootRho <- function(dataSet, i) {
+  rho <- cor(log.age[i], students_data$stai_t, use="complete.obs", method="spearman")
+  return(rho)
+}
+bootSpearmanResult <- boot(students_data, bootRho, 2000)
+boot.ci(bootSpearmanResult, conf=0.95, type="bca")
+
+#Partial Correlation between age, exhaution and study hours
+study_data <- students_data %>% select("stud_h", "mbi_ex")
+study_data$log.age <- log.age
+head(study_data)
+pc <- pcor(c("log.age","stud_h", "mbi_ex"), var(study_data))
+pc
+pcor.test(pc, 1, 886)
+```
