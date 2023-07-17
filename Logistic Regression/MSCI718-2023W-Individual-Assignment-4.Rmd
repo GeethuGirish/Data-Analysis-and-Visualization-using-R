@@ -1,0 +1,130 @@
+---
+title: "Individual Assigmnet 4"
+author: "MSCI 718 2023W"
+date: "2023-04-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(gridExtra)
+library(car)
+library(GGally)
+```
+
+#importing the data
+```{r}
+cancer.dat <- read.csv('C:/Users/Geethu/Documents/Canada/University of Waterloo/Winter 2023/MSCI 718/Assignments/Assignment 4/Breast Cancer Dataset/data.csv')
+cancer.dat$diagnosis <- factor(cancer.dat$diagnosis, levels = c("B", "M"))
+str(cancer.dat)
+summary(cancer.dat)
+```
+
+Shrnking the dataset
+```{r}
+cancer.dat <- cancer.dat %>% select(radius_worst, symmetry_mean, fractal_dimension_mean, diagnosis)
+levels(cancer.dat$diagnosis)
+```
+
+Check for missing values
+```{r}
+cancer.dat %>% summarise_all(list(~sum(is.na(.))))
+```
+
+Checking for outliers: Boxplot
+```{r}
+radius.worst.box <- ggplot(data = cancer.dat, aes(y = radius_worst)) + geom_boxplot() + labs(title = "Radius Worst")
+#texture.worst.box <- ggplot(data = cancer.dat, aes(y =  texture_worst)) + geom_boxplot() + labs(title = "Texture Worst")
+symmetry.mean.box <- ggplot(data = cancer.dat, aes(y = symmetry_mean)) + geom_boxplot() + labs(title = "Symmetry Mean")
+fractal.dimension.mean.box <- ggplot(data = cancer.dat, aes(y = fractal_dimension_mean )) + geom_boxplot() + labs(title = "Fractal Dimension Mean")
+
+boxplot <- grid.arrange(radius.worst.box, symmetry.mean.box, fractal.dimension.mean.box, ncol=3)
+```
+
+Removing outliers using IQR
+```{r}
+#Removing outliers using IQR
+radius.worst.iqr <- IQR(cancer.dat$radius_worst)
+radius.worst.low <- quantile(cancer.dat$radius_worst, 0.25) - 1.5 * radius.worst.iqr
+radius.worst.high <- quantile(cancer.dat$radius_worst, 0.75) + 1.5 * radius.worst.iqr
+radius.worst.low
+radius.worst.high
+
+symmetry.mean.iqr <- IQR(cancer.dat$symmetry_mean)
+symmetry.mean.low <- quantile(cancer.dat$symmetry_mean, 0.25) - 1.5 * symmetry.mean.iqr
+symmetry.mean.high <- quantile(cancer.dat$symmetry_mean, 0.75) + 1.5 * symmetry.mean.iqr
+symmetry.mean.low
+symmetry.mean.high
+
+fractal.dimension.mean.iqr <- IQR(cancer.dat$fractal_dimension_mean)
+fractal.dimension.mean.low <- quantile(cancer.dat$fractal_dimension_mean, 0.25) - 1.5 * fractal.dimension.mean.iqr
+fractal.dimension.mean.high <- quantile(cancer.dat$fractal_dimension_mean, 0.75) + 1.5 * fractal.dimension.mean.iqr
+fractal.dimension.mean.low
+fractal.dimension.mean.high
+```
+```{r}
+cancer.dat.nooutliers <- subset(cancer.dat, cancer.dat$radius_worst >= radius.worst.low  & cancer.dat$radius_worst <= radius.worst.high)
+cancer.dat.nooutliers <- subset(cancer.dat.nooutliers, cancer.dat.nooutliers$symmetry_mean >= symmetry.mean.low  & cancer.dat.nooutliers$symmetry_mean <= symmetry.mean.high)
+cancer.dat.nooutliers <- subset(cancer.dat.nooutliers, cancer.dat.nooutliers$fractal_dimension_mean >= fractal.dimension.mean.low  & cancer.dat.nooutliers$fractal_dimension_mean <= fractal.dimension.mean.high)
+```
+
+```{r}
+radius.worst.box <- ggplot(data = cancer.dat.nooutliers, aes(y = radius_worst)) + geom_boxplot() + labs(title = "Radius Worst")
+symmetry.mean.box <- ggplot(data = cancer.dat.nooutliers, aes(y = symmetry_mean)) + geom_boxplot() + labs(title = "Symmetry Mean")
+fractal.dimension.mean.box <- ggplot(data = cancer.dat.nooutliers, aes(y = fractal_dimension_mean)) + geom_boxplot() + labs(title = "Fractal Dimension Mean")
+
+boxplot <- grid.arrange(radius.worst.box, symmetry.mean.box, fractal.dimension.mean.box, ncol=3)
+```
+
+```{r}
+radius.worst.box <- ggplot(data = cancer.dat.nooutliers, aes(x = radius_worst, y = diagnosis)) + geom_boxplot() + labs(title = "Radius worst vs diagnosis")
+symmetry.mean.box <- ggplot(data = cancer.dat.nooutliers, aes(x = symmetry_mean, y = diagnosis)) + geom_boxplot() + labs(title = "Symmetry mean vs diagnosis")
+fractal.dimension.mean.box <- ggplot(data = cancer.dat.nooutliers, aes(x = fractal_dimension_mean, y = diagnosis)) + geom_boxplot() + labs(title = "Fractal Dimension Mean vs diagnosis")
+boxplot <- grid.arrange(radius.worst.box, symmetry.mean.box, fractal.dimension.mean.box, ncol=3)
+```
+
+Pairplot
+```{r}
+ggpairs(cancer.dat.nooutliers)
+```
+
+
+
+Building the model
+```{r}
+cancer.dat.model <- glm(diagnosis ~ radius_worst  + symmetry_mean + fractal_dimension_mean, data=cancer.dat.nooutliers, family=binomial())
+
+summary(cancer.dat.model)
+```
+
+```{r}
+exp(confint(cancer.dat.model))
+```
+
+testing multicollinearity
+```{r}
+vif(cancer.dat.model)
+1/vif(cancer.dat.model)
+mean(vif(cancer.dat.model))
+```
+
+Testing Residuals or Independence of errors
+```{r}
+durbinWatsonTest(cancer.dat.model)
+```
+
+Testing logit linearity
+```{r}
+cancer.dat.nooutliers$log.radius_worst <- log(cancer.dat.nooutliers$radius_worst)*cancer.dat.nooutliers$radius_worst
+#cancer.dat.nooutliers$log.texture_worst <- log(cancer.dat.nooutliers$texture_worst)*cancer.dat.nooutliers$texture_worst
+cancer.dat.nooutliers$log.symmetry_mean <- log(cancer.dat.nooutliers$symmetry_mean)*cancer.dat.nooutliers$symmetry_mean
+#cancer.dat.nooutliers$log.compactness_worst <- log(cancer.dat.nooutliers$compactness_worst)*cancer.dat.nooutliers$compactness_worst
+cancer.dat.nooutliers$log.fractal_dimension_mean <- log(cancer.dat.nooutliers$fractal_dimension_mean)*cancer.dat.nooutliers$fractal_dimension_mean
+
+cancer.dat.model <- glm(diagnosis ~ radius_worst  + symmetry_mean + fractal_dimension_mean + log.radius_worst  + log.symmetry_mean + log.fractal_dimension_mean, data=cancer.dat.nooutliers, family=binomial())
+
+summary(cancer.dat.model)
+```
