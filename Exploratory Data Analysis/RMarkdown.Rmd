@@ -1,0 +1,323 @@
+---
+title: "Assignment1"
+author: "Geethu Girish"
+date: "2023-01-27"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, results = 'hide')
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(pastecs)
+
+salaries_clean <-read.csv('N:/Geethu Academics/MSCI 718/Assignment/archive/salaries_clean.csv')
+```
+
+```{r, echo = FALSE, results = 'hide'}
+#Importing data into RStudio
+
+#getwd()
+
+
+#Exploring the data
+str(salaries_clean)
+
+#Selecting out data subset and cleaning
+sal_US <- salaries_clean[!(is.na(salaries_clean$location_country) | salaries_clean$location_country == ""),] %>% 
+  filter(location_country %in% "US") %>% 
+  select(location_country, total_experience_years, annual_base_pay, job_title_category) %>% 
+  mutate(rank = total_experience_years < 5,
+         rank = if_else(rank == TRUE, "beginner", ""))
+
+sal_US_beginner <- sal_US %>% 
+  filter(rank %in% c("beginner")) 
+
+sal_not_beg <- sal_US %>% 
+  filter(!(rank %in% c("beginner"))) %>% 
+  mutate(rank = total_experience_years < 10,
+         rank = if_else(rank == TRUE, "intermediate", "senior"))
+
+sal_US <- rbind(sal_US_beginner, sal_not_beg)
+
+sal_US <- na.omit(sal_US)
+
+sal_US <- sal_US %>% 
+  mutate(category = job_title_category == "Software",
+          category = if_else(category == TRUE, "Software", "Others")) %>% 
+  select(total_experience_years, annual_base_pay, category, rank)
+
+#View(sal_US)
+
+#Checking for outliers using histogram
+hist(sal_US$annual_base_pay)
+
+#Checking for outliers using boxplot
+ggplot(data = sal_US, aes(x = category, y = annual_base_pay)) + geom_boxplot() + labs(title = "Annual base pay in US")
+
+sal_US_OT <- sal_US %>% 
+  filter(category %in% "Others")
+
+sal_US_SW <- sal_US %>% 
+  filter(category %in% "Software")
+
+#Using IQR for outliers
+iqr_OT <- IQR(sal_US_OT$annual_base_pay)
+low_OT <- quantile(sal_US_OT$annual_base_pay, 0.25) - 1.5 * iqr_OT
+up_OT <- quantile(sal_US_OT$annual_base_pay, 0.75) + 1.5 * iqr_OT
+
+
+iqr_SW <- IQR(sal_US_SW$annual_base_pay)
+low_SW <- quantile(sal_US_SW$annual_base_pay, 0.25) - 1.5 * iqr_SW
+up_SW <- quantile(sal_US_SW$annual_base_pay, 0.75) + 1.5 * iqr_SW
+
+
+sal_US_OT_nooutliers <- subset(sal_US, sal_US$annual_base_pay > 1000 & sal_US$annual_base_pay < up_OT)
+sal_US_sw_nooutliers <- subset(sal_US, sal_US$annual_base_pay > low_SW & sal_US$annual_base_pay < up_SW)
+
+
+sal_US_nooutliers <- rbind(sal_US_OT_nooutliers, sal_US_sw_nooutliers)
+
+#Checking for outliers using boxplot
+ggplot(data = sal_US_nooutliers, aes(x = category, y = annual_base_pay)) + geom_boxplot() + labs(title = "Annual base pay in US")
+
+#Plot Annual base pay in US wrt Employee Rank
+ggplot(data = sal_US_nooutliers, aes(x = annual_base_pay, y = rank, fill = category)) + 
+  geom_bar(stat = "identity", position = position_dodge()) + 
+   labs(x = "Annual base pay in US" , y = "Employee Rank", title = "Annual base pay in US wrt Employee Rank")
+
+
+sal_US_beginner <- sal_US_nooutliers %>% 
+  filter(rank %in% c("beginner")) 
+
+sal_US_intermediate <- sal_US_nooutliers %>% 
+  filter(rank %in% c("intermediate"))
+#sal_US_intermediate%>% count(category) 
+
+sal_US_senior <- sal_US_nooutliers %>% 
+  filter(rank %in% c("senior"))
+#sal_US_senior %>% count(category) 
+
+
+#Checking for outliers using histogram
+#hist(sal_US_beginner$annual_base_pay)
+#hist(sal_US_intermediate$annual_base_pay)
+#hist(sal_US_senior$annual_base_pay)
+
+
+#Checking for outliers using boxplot
+#ggplot(data = sal_US_beginner, aes(x = category, y = annual_base_pay)) + geom_boxplot() + labs(title = "Annual base pay in US for Beginners")
+#ggplot(data = sal_US_intermediate, aes(x = category, y = annual_base_pay)) + geom_boxplot() + labs(title = "Annual base pay in US for Intermediate")
+#ggplot(data = sal_US_senior, aes(x = category, y = annual_base_pay)) + geom_boxplot() + labs(title = "Annual base pay in US for Seniors")
+
+
+#From the boxplot we could identify there is outliers in Senior rank in Others category, in beginner rank in Others Others and in beginner rank in Software Others
+#Removing the outliers
+
+#Creating appropriate dataset
+sal_US_beginner_SW <- sal_US_beginner %>% 
+  filter(category %in% "Software")
+
+sal_US_beginner_OT <- sal_US_beginner %>% 
+  filter(!(category %in% "Software"))
+
+sal_US_intermediate_SW <- sal_US_intermediate %>% 
+  filter(category %in% "Software")
+
+sal_US_intermediate_OT <- sal_US_intermediate %>% 
+  filter(!(category %in% "Software"))
+
+sal_US_senior_SW <- sal_US_senior %>% 
+  filter(category %in% "Software")
+
+sal_US_senior_OT <- sal_US_senior %>% 
+  filter(!(category %in% "Software"))
+
+
+#Histogram for beginners
+sal_US_beginner %>% 
+  ggplot(aes(x=annual_base_pay, fill = category)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) + 
+    stat_function(fun=dnorm, args=list(mean=mean(sal_US_beginner$annual_base_pay, na.rm=TRUE), sd=sd(sal_US_beginner$annual_base_pay, na.rm=TRUE))) + labs(title = "Annual base pay in US for Beginners")
+
+#Histogram for intermediate
+sal_US_intermediate %>% 
+  ggplot(aes(x=annual_base_pay, fill = category)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) + 
+    stat_function(fun=dnorm, args=list(mean=mean(sal_US_intermediate$annual_base_pay, na.rm=TRUE), sd=sd(sal_US_intermediate$annual_base_pay, na.rm=TRUE))) +
+    labs(title = "Annual base pay in US for Intermediate")
+
+#Histogram for senior
+sal_US_senior %>% 
+  ggplot(aes(x=annual_base_pay, fill = category)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) + 
+    stat_function(fun=dnorm, args=list(mean=mean(sal_US_senior$annual_base_pay, na.rm=TRUE), sd=sd(sal_US_senior$annual_base_pay, na.rm=TRUE))) +
+    labs(title = "Annual base pay in US for Seniors")
+
+#Checking normality of the data
+#Using Histogram
+
+#for beginners in sofware category
+sal_US_beginner_SW %>% 
+  ggplot(aes(x=annual_base_pay)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) + 
+    stat_function(fun=dnorm, args=list(mean=mean(sal_US_beginner_SW$annual_base_pay, na.rm=TRUE), sd=sd(sal_US_beginner_SW$annual_base_pay, na.rm=TRUE))) +
+    labs(title = "Annual base pay in US for Beginners in Software category")
+
+#for beginners in other field
+sal_US_beginner_OT %>% 
+  ggplot(aes(x=annual_base_pay)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) + 
+   stat_function(fun=dnorm, args=list(mean=mean(sal_US_beginner_OT$annual_base_pay, na.rm=TRUE), sd=sd(sal_US_beginner_OT$annual_base_pay, na.rm=TRUE))) +
+  labs(title = "Annual base pay in US for Beginners in Other category")
+
+#for intermediate in sofware category
+sal_US_intermediate_SW %>% 
+  ggplot(aes(x=annual_base_pay)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) + 
+    stat_function(fun=dnorm, args=list(mean=mean(sal_US_intermediate_SW$annual_base_pay, na.rm=TRUE), sd=sd(sal_US_intermediate_SW$annual_base_pay, na.rm=TRUE))) +
+  labs(title = "Annual base pay in US for Intermediate in Software category")
+
+#for intermediate in other field
+sal_US_intermediate_OT %>% 
+  ggplot(aes(x=annual_base_pay)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) + 
+   stat_function(fun=dnorm, args=list(mean=mean(new_sal_US_beg$annual_base_pay, na.rm=TRUE), sd=sd(new_sal_US_beg$annual_base_pay, na.rm=TRUE))) +
+  labs(title = "Annual base pay in US for Intermediate in Other category")
+
+#for senior in sofware category
+sal_US_senior_SW %>% 
+  ggplot(aes(x=annual_base_pay)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) + 
+    stat_function(fun=dnorm, args=list(mean=mean(sal_US_intermediate_OT$annual_base_pay, na.rm=TRUE), sd=sd(sal_US_intermediate_OT$annual_base_pay, na.rm=TRUE))) +
+  labs(title = "Annual base pay in US for Senior in Software category")
+
+#for senior in other field
+sal_US_senior_OT %>% 
+  ggplot(aes(x=annual_base_pay)) + theme(legend.position = "none") +
+    geom_histogram(aes(y=..density..)) + 
+   stat_function(fun=dnorm, args=list(mean=mean(sal_US_senior_OT$annual_base_pay, na.rm=TRUE), sd=sd(sal_US_senior_OT$annual_base_pay, na.rm=TRUE))) +
+  labs(title = "Annual base pay in US for Senior in Other category")
+
+#Checking normality of the data
+#Using Q-Q Plot
+
+#for beginners in sofware category
+sal_US_beginner_SW  %>% 
+  ggplot(aes(sample=annual_base_pay)) + stat_qq()+ geom_qq_line(aes(color="red")) + theme(legend.position = "none") +
+   labs(title = "Annual base pay in US for Beginners in Software category")
+
+#for beginners in other field
+sal_US_beginner_OT %>% 
+  ggplot(aes(sample=annual_base_pay)) + stat_qq()+ geom_qq_line(aes(color="red")) + theme(legend.position = "none") +
+   labs(title = "Annual base pay in US for Beginners in Other category")
+
+#for intermediate in sofware category
+sal_US_intermediate_SW %>% 
+  ggplot(aes(sample=annual_base_pay)) + stat_qq()+ geom_qq_line(aes(color="red")) + theme(legend.position = "none") +
+   labs(title = "Annual base pay in US for Intermediates in Software category")
+
+#for intermediate in other field
+sal_US_intermediate_OT %>% 
+  ggplot(aes(sample=annual_base_pay)) + stat_qq()+ geom_qq_line(aes(color="red")) + theme(legend.position = "none") +
+   labs(title = "Annual base pay in US for Intermediate in Other category")
+
+#for senior in sofware category
+sal_US_senior_SW %>% 
+  ggplot(aes(sample=annual_base_pay)) + stat_qq()+ geom_qq_line(aes(color="red")) + theme(legend.position = "none") +
+   labs(title = "Annual base pay in US for Seniors in Software category")
+
+#for senior in other field
+sal_US_senior_OT %>% 
+  ggplot(aes(sample=annual_base_pay)) + stat_qq()+ geom_qq_line(aes(color="red")) + theme(legend.position = "none") +
+   labs(title = "Annual base pay in US for Seniors in Software category")
+
+
+#Checking for normality opf the data
+#Using Shapiro-Wilk test
+stat.desc(sal_sw_nooutliers_beginner$annual_base_pay, basic = FALSE, norm =TRUE)["skewness"]
+shapiro.test(sal_US_beginner_SW $annual_base_pay)
+shapiro.test(sal_US_beginner_OT$annual_base_pay)
+shapiro.test(sal_US_intermediate_SW$annual_base_pay)
+shapiro.test(sal_US_intermediate_OT$annual_base_pay)
+shapiro.test(sal_US_senior_SW$annual_base_pay)
+shapiro.test(sal_US_senior_OT$annual_base_pay)
+
+#summary for different categories and rank
+#for beginners in sofware category
+sal_US_beginner_SW_summary <- sal_US_beginner_SW %>% 
+  group_by(category) %>% 
+  summarise(observations = n(), avg_sal = mean(annual_base_pay), se = sd(annual_base_pay)/sqrt(n()))
+
+#for beginners in Other category
+sal_US_beginner_OT_summary <- sal_US_beginner_OT %>% 
+  group_by(category) %>% 
+  summarise(observations = n(), avg_sal = mean(annual_base_pay), se = sd(annual_base_pay)/sqrt(n()))
+
+#for intermediate in sofware category
+sal_US_intermediate_SW_summary <- sal_US_intermediate_SW %>% 
+  group_by(category) %>% 
+  summarise(observations = n(), avg_sal = mean(annual_base_pay), se = sd(annual_base_pay)/sqrt(n()))
+
+sal_US_intermediate_OT_summary <- sal_US_intermediate_OT %>% 
+  group_by(category) %>% 
+  summarise(observations = n(), avg_sal = mean(annual_base_pay), se = sd(annual_base_pay)/sqrt(n()))
+
+sal_US_senior_SW_summary <- sal_US_senior_SW %>% 
+  group_by(category) %>% 
+  summarise(observations = n(), avg_sal = mean(annual_base_pay), se = sd(annual_base_pay)/sqrt(n()))
+
+sal_US_senior_OT_summary <- sal_US_senior_OT %>% 
+  group_by(category) %>% 
+  summarise(observations = n(), avg_sal = mean(annual_base_pay), se = sd(annual_base_pay)/sqrt(n()))
+
+sal_nooutliers_beginner_summary <- rbind(sal_US_beginner_SW_summary, sal_US_beginner_OT_summary)
+sal_nooutliers_intermediate_summary <- rbind(sal_US_intermediate_SW_summary, sal_US_intermediate_OT_summary)
+sal_nooutliers_senior_summary <- rbind(sal_US_senior_SW_summary, sal_US_senior_OT_summary)
+
+sal_US_beginner_summary <- sal_US_beginner %>% 
+  group_by(category) %>% 
+  summarise(observations = n(), avg_sal = mean(annual_base_pay), se = sd(annual_base_pay)/sqrt(n()))
+sal_US_beginner_summary
+sal_US_intermediate_summary <- sal_US_intermediate %>% 
+  group_by(category) %>% 
+  summarise(observations = n(), avg_sal = mean(annual_base_pay), se = sd(annual_base_pay)/sqrt(n()))
+sal_US_intermediate_summary
+sal_US_senior_summary <- sal_US_senior %>% 
+  group_by(category) %>% 
+  summarise(observations = n(), avg_sal = mean(annual_base_pay), se = sd(annual_base_pay)/sqrt(n()))
+sal_US_senior_summary
+
+
+#sal_nooutliers_beginner_summary
+#sal_nooutliers_intermediate_summary
+#sal_nooutliers_senior_summary
+
+#Confidence Interval
+#CI for beginners
+ggplot(data = sal_nooutliers_beginner_summary, aes(x = avg_sal, y = category)) + 
+  geom_point() + 
+  geom_label(aes(label = avg_sal)) +
+  geom_errorbarh(aes(xmax = avg_sal + 1.96*se, xmin = avg_sal - 1.96*se)) +
+  labs(x = "Average Salary for beginners in US" , y = "Job Category", title = "CI for average salary for beginners in US wrt Job category") +
+  theme_bw()
+
+#CI for intermediate
+ggplot(data = sal_nooutliers_intermediate_summary, aes(x = avg_sal, y = category)) + 
+  geom_point() + 
+  geom_label(aes(label = avg_sal)) +
+  geom_errorbarh(aes(xmax = avg_sal + 1.96*se, xmin = avg_sal - 1.96*se)) +
+  labs(x = "Average Salary for intermediate in US" , y = "Job Category", title = "CI for average salary for intermediate in US wrt Job category") +
+  theme_bw()
+
+#CI for senior
+ggplot(data = sal_nooutliers_senior_summary, aes(x = avg_sal, y = category)) + 
+  geom_point() + 
+  geom_label(aes(label = avg_sal)) +
+  geom_errorbarh(aes(xmax = avg_sal + 1.96*se, xmin = avg_sal - 1.96*se)) +
+  labs(x = "Average Salary for senior in US" , y = "Job Category", title = "CI for average salary for senior in US wrt Job category") +
+  theme_bw()
+```
